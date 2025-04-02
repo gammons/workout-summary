@@ -1,0 +1,21 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    nokogiri (1.18.7-x86_64-linux-gnu)
+      racc (~> 1.4)
+    racc (1.8.1)
+    terminal-table (4.0.0)
+      unicode-display_width (>= 1.1.1, < 4)
+    unicode-display_width (3.1.4)
+      unicode-emoji (~> 4.0, >= 4.0.4)
+    unicode-emoji (4.0.4)
+
+PLATFORMS
+  x86_64-linux
+
+DEPENDENCIES
+  nokogiri
+  terminal-table
+
+BUNDLED WITH
+   2.4.10

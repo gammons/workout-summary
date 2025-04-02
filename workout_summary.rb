@@ -1,9 +1,8 @@
 require 'nokogiri'
 require 'time'
-
+require 'terminal-table'
 include Math
 
-# Constants
 METER_PER_MILE = 1609.34
 
 # --- Haversine formula ---
@@ -12,20 +11,20 @@ def haversine(lat1, lon1, lat2, lon2)
   r = 6371000 # meters
   dlat = (lat2 - lat1) * rad
   dlon = (lon2 - lon1) * rad
-  a = sin(dlat/2)**2 + cos(lat1 * rad) * cos(lat2 * rad) * sin(dlon/2)**2
+  a = sin(dlat / 2)**2 + cos(lat1 * rad) * cos(lat2 * rad) * sin(dlon / 2)**2
   c = 2 * atan2(sqrt(a), sqrt(1 - a))
   r * c
 end
 
-# --- Format pace from seconds/km or seconds/mile ---
-def format_pace(seconds_per_km = 0, unit: :km)
-  return "-" if seconds_per_km <= 0
-  minutes = (seconds_per_km / 60).floor
-  seconds = (seconds_per_km % 60).round
-  "#{minutes}:#{format('%02d', seconds)}"
+# --- Format pace ---
+def format_pace(seconds)
+  return "-" if seconds <= 0
+  minutes = (seconds / 60).floor
+  sec = (seconds % 60).round
+  "#{minutes}:#{format('%02d', sec)}"
 end
 
-# --- Per-minute summary builder ---
+# --- Build summary ---
 def build_minute_summary(data, compute_distance: false)
   summary = []
 
@@ -35,16 +34,21 @@ def build_minute_summary(data, compute_distance: false)
 
     total_dist = 0.0
     total_time = 0.0
+    total_elev_change = 0.0
     elevations = []
     heart_rates = []
 
     (1...points.size).each do |i|
       prev = points[i - 1]
       curr = points[i]
+
       dist = compute_distance ? haversine(prev[:lat], prev[:lon], curr[:lat], curr[:lon]) : (curr[:dist] - prev[:dist])
       time_diff = curr[:time] - prev[:time]
+      elev_diff = curr[:ele].to_f - prev[:ele].to_f
+
       total_dist += dist
       total_time += time_diff
+      total_elev_change += elev_diff
     end
 
     points.each do |p|
@@ -54,13 +58,15 @@ def build_minute_summary(data, compute_distance: false)
 
     pace_sec_per_km = total_dist > 0 ? (total_time / (total_dist / 1000)) : 0
     pace_sec_per_mile = total_dist > 0 ? (total_time / (total_dist / METER_PER_MILE)) : 0
+    grade = total_dist > 0 ? ((total_elev_change / total_dist) * 100).round(1) : nil
 
     summary << {
       minute: minute + 1,
-      pace_km: format_pace(pace_sec_per_km, unit: :km),
-      pace_mile: format_pace(pace_sec_per_mile, unit: :mile),
+      pace_km: format_pace(pace_sec_per_km),
+      pace_mile: format_pace(pace_sec_per_mile),
       heart_rate: heart_rates.any? ? (heart_rates.sum / heart_rates.size) : nil,
-      elevation: elevations.any? ? (elevations.sum / elevations.size.to_f).round(1) : nil
+      elevation: elevations.any? ? (elevations.sum / elevations.size.to_f).round(1) : nil,
+      grade: grade
     }
   end
 
@@ -119,16 +125,24 @@ def parse_gpx(doc)
   build_minute_summary(data, compute_distance: true)
 end
 
-# --- Print output ---
+# --- Pretty ASCII table output ---
 def print_table(rows)
-  puts "Minute | Pace (mile) | HR  | Elev (m)"
-  puts "-" * 50
-  rows.each do |r|
-    puts "#{r[:minute].to_s.rjust(6)} | #{r[:pace_mile].ljust(11)} | #{r[:heart_rate].to_s.rjust(3)} | #{r[:elevation].to_s.rjust(8)}"
+  headings = ['Minute', 'Pace (km)', 'Pace (mile)', 'HR', 'Elev (m)', 'Grade (%)']
+  table_rows = rows.map do |r|
+    [
+      r[:minute],
+      r[:pace_km],
+      r[:pace_mile],
+      r[:heart_rate],
+      r[:elevation],
+      r[:grade]
+    ]
   end
+
+  puts Terminal::Table.new title: "Workout Summary", headings: headings, rows: table_rows
 end
 
-# --- Entry Point ---
+# --- Main ---
 if ARGV.empty?
   puts "Usage: ruby workout_summary.rb path/to/file.[tcx|gpx]"
   exit 1
@@ -148,4 +162,3 @@ summary =
   end
 
 print_table(summary)
-
